@@ -1,6 +1,7 @@
 import { Storage } from './storage.js';
 import { Audio } from './audio.js';
 import { LEVELS } from './levels.js';
+import { Minimap } from './minimap.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -20,8 +21,10 @@ const POWERUP_ICON = {
 
 export class UI {
   constructor(handlers) {
-    this.handlers = handlers; // { onMenuAction(action), ... }
+    this.handlers = handlers;
     this._toastTimer = null;
+    this._lastCombo = 0;
+    this.minimap = new Minimap($('minimap'));
     this.bindButtons();
     this.refreshMenu();
   }
@@ -53,11 +56,28 @@ export class UI {
 
   setObjective(text) { $('hud-objective').textContent = text; }
 
-  updateHud({ level, score, coinsCollected, coinsTotal, time, hp, maxHp, powerups }) {
+  updateHud({ level, score, coinsCollected, coinsTotal, time, hp, maxHp, powerups, combo }) {
     $('hud-level').textContent = `${level}`;
     $('hud-score').textContent = String(score);
     $('hud-coins').textContent = `${coinsCollected} / ${coinsTotal}`;
     $('hud-time').textContent = time.toFixed(1);
+
+    const comboEl = $('hud-combo');
+    if (combo && combo > 1) {
+      comboEl.textContent = `x${combo}`;
+      if (combo !== this._lastCombo) {
+        comboEl.classList.remove('hidden');
+        // Retrigger pop animation
+        comboEl.style.animation = 'none';
+        void comboEl.offsetWidth;
+        comboEl.style.animation = '';
+      } else {
+        comboEl.classList.remove('hidden');
+      }
+    } else {
+      comboEl.classList.add('hidden');
+    }
+    this._lastCombo = combo || 0;
 
     // Hearts
     const heartsEl = $('hud-hearts');
@@ -84,6 +104,10 @@ export class UI {
         puEl.appendChild(span);
       }
     }
+  }
+
+  updateMinimap(data) {
+    this.minimap.draw(data);
   }
 
   toast(text, ms = 1500) {

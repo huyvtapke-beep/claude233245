@@ -3,73 +3,132 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
+import { Assets } from './assets.js';
 
 // Renderer
 const canvas = document.getElementById('canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.2;
 
 // Scene & camera
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b1020);
 
 const camera = new THREE.PerspectiveCamera(
-  60, window.innerWidth / window.innerHeight, 0.1, 400
+  60, window.innerWidth / window.innerHeight, 0.1, 500
 );
 camera.position.set(0, 12, 18);
 camera.lookAt(0, 0, 0);
 
+// PMREM environment: start with synthetic RoomEnvironment for immediate PBR reflections.
+// Will be replaced by HDR-derived env once assets finish loading.
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+const roomEnv = new RoomEnvironment(renderer);
+scene.environment = pmremGenerator.fromScene(roomEnv, 0.04).texture;
+
 // Lights
-const ambient = new THREE.AmbientLight(0xffffff, 0.18);
+const ambient = new THREE.AmbientLight(0xffffff, 0.12);
 scene.add(ambient);
 
-const hemi = new THREE.HemisphereLight(0xb6d6ff, 0x4a3a20, 0.55);
+const hemi = new THREE.HemisphereLight(0xb6d6ff, 0x4a3a20, 0.45);
 hemi.position.set(0, 50, 0);
 scene.add(hemi);
 
-const sun = new THREE.DirectionalLight(0xfff2c8, 1.25);
-sun.position.set(30, 50, 20);
+// Main directional sun with tighter, sharper shadows
+const sun = new THREE.DirectionalLight(0xfff2c8, 1.45);
+sun.position.set(28, 50, 18);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -50;
-sun.shadow.camera.right = 50;
-sun.shadow.camera.top = 50;
-sun.shadow.camera.bottom = -50;
+const SHADOW_RES = window.devicePixelRatio > 1 ? 2048 : 4096;
+sun.shadow.mapSize.set(SHADOW_RES, SHADOW_RES);
+const SHADOW_HALF = 26;
+sun.shadow.camera.left = -SHADOW_HALF;
+sun.shadow.camera.right = SHADOW_HALF;
+sun.shadow.camera.top = SHADOW_HALF;
+sun.shadow.camera.bottom = -SHADOW_HALF;
 sun.shadow.camera.near = 1;
 sun.shadow.camera.far = 120;
-sun.shadow.bias = -0.0003;
-sun.shadow.normalBias = 0.05;
-sun.shadow.radius = 4;
+sun.shadow.bias = -0.0002;
+sun.shadow.normalBias = 0.04;
+sun.shadow.radius = 6;
+sun.shadow.blurSamples = 24;
 scene.add(sun);
+scene.add(sun.target);
 
-// Rim light (back-light for silhouette pop)
-const rim = new THREE.DirectionalLight(0xc4d3ff, 0.45);
+// Rim light for silhouette pop
+const rim = new THREE.DirectionalLight(0xc4d3ff, 0.55);
 rim.position.set(-20, 25, -25);
 scene.add(rim);
 
-// Post-processing
+// Subtle fill from below to soften deep shadows
+const fill = new THREE.DirectionalLight(0xffd8a0, 0.15);
+fill.position.set(-15, -5, 10);
+scene.add(fill);
+
+// Post-processing: bloom + vignette + output
 const composer = new EffectComposer(renderer);
 composer.setSize(window.innerWidth, window.innerHeight);
 composer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-const renderPass = new RenderPass(scene, camera);
-composer.addPass(renderPass);
+composer.addPass(new RenderPass(scene, camera));
+
 const bloom = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.55,   // strength
-  0.6,    // radius
-  0.85,   // threshold
+  0.6, 0.65, 0.82,
 );
 composer.addPass(bloom);
+
+// Custom vignette + film grain shader pass
+const vignettePass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    uOffset:   { value: 1.05 },
+    uDarkness: { value: 0.85 },
+    uGrain:    { value: 0.025 },
+    uTime:     { value: 0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uOffset;
+    uniform float uDarkness;
+    uniform float uGrain;
+    uniform float uTime;
+    varying vec2 vUv;
+    float rand(vec2 co){
+      return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec2 p = (vUv - 0.5) * vec2(uOffset);
+      float v = 1.0 - dot(p, p) * uDarkness;
+      v = clamp(v, 0.0, 1.0);
+      v = smoothstep(0.0, 1.0, v);
+      vec3 col = c.rgb * v;
+      // Tiny film grain
+      float n = (rand(vUv * vec2(800.0, 600.0) + uTime) - 0.5) * uGrain;
+      col += n;
+      gl_FragColor = vec4(col, c.a);
+    }
+  `,
+});
+composer.addPass(vignettePass);
 composer.addPass(new OutputPass());
 
 // UI + Game
@@ -94,6 +153,18 @@ const ui = new UI({
 
 game = new Game(scene, camera, ui);
 ui.showOverlay('menu');
+
+// Load real assets in the background, swap env map when ready
+Assets.load(renderer).then(() => {
+  if (Assets.envMap) {
+    if (scene.environment) scene.environment.dispose?.();
+    scene.environment = Assets.envMap;
+  }
+  // Notify world so it can swap to real textures
+  if (game && game.world && game.world.applyAssets) {
+    game.world.applyAssets(Assets);
+  }
+});
 
 // Camera follow
 const camOffset = new THREE.Vector3(0, 8.5, 13);
@@ -123,28 +194,22 @@ window.addEventListener('resize', () => {
   bloom.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Unlock audio on first user gesture
 window.addEventListener('pointerdown', () => Audio.resume(), { once: true });
 window.addEventListener('keydown', () => Audio.resume(), { once: true });
 
-// Sun position tracks player a bit so shadows stay tight
 function updateSun() {
-  if (!game.player) return;
-  sun.target.position.copy(game.player.position);
+  if (!game.player || game.state !== 'playing') return;
+  const p = game.player.position;
+  sun.target.position.set(p.x, 0, p.z);
   sun.target.updateMatrixWorld();
-  sun.position.set(
-    game.player.position.x + 30,
-    50,
-    game.player.position.z + 20
-  );
+  sun.position.set(p.x + 28, 50, p.z + 18);
 }
 
-// Adjust bloom strength per theme for atmosphere
 function tuneBloomForLevel() {
   const t = game.world?.theme;
-  if (!t) { bloom.strength = 0.55; return; }
-  bloom.strength = { grass: 0.5, desert: 0.55, snow: 0.55, lava: 1.05, space: 0.95 }[t] || 0.55;
-  bloom.threshold = (t === 'lava' || t === 'space') ? 0.7 : 0.85;
+  if (!t) { bloom.strength = 0.6; return; }
+  bloom.strength = { grass: 0.55, desert: 0.55, snow: 0.6, lava: 1.1, space: 1.0 }[t] || 0.6;
+  bloom.threshold = (t === 'lava' || t === 'space') ? 0.68 : 0.82;
 }
 let lastTheme = null;
 function checkTheme() {
@@ -162,6 +227,7 @@ function animate() {
   updateCamera(dt);
   updateSun();
   checkTheme();
+  vignettePass.uniforms.uTime.value = performance.now() * 0.001;
   Input.endFrame();
   composer.render();
   requestAnimationFrame(animate);

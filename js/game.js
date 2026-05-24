@@ -45,6 +45,9 @@ export class Game {
 
     this.coinsTotal = 0;
     this.coinsCollected = 0;
+
+    this.combo = 0;
+    this.lastCoinTime = -10;
   }
 
   startNewRun() {
@@ -93,6 +96,8 @@ export class Game {
     this.coinsCollected = 0;
     this.score = 0;
     this.elapsed = 0;
+    this.combo = 0;
+    this.lastCoinTime = -10;
 
     this.world.setPortalActive(false);
     this.ui.setObjective(def.objective);
@@ -238,9 +243,19 @@ export class Game {
       if (dx * dx + dy * dy + dz * dz < 0.95 * 0.95) {
         c.remove();
         this.coinsCollected++;
-        this.score += 10;
+        // Combo: chain pickups within 3s
+        if (this.elapsed - this.lastCoinTime < 3.0) {
+          this.combo = Math.min(8, this.combo + 1);
+        } else {
+          this.combo = 1;
+        }
+        this.lastCoinTime = this.elapsed;
+        const mult = this.combo > 1 ? this.combo : 1;
+        this.score += 10 * mult;
         Audio.coin();
-        this.particles.burst(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z, 0xffd700, 10, 3);
+        const burstColor = this.combo >= 3 ? 0xff8844 : 0xffd700;
+        this.particles.burst(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z, burstColor, 10 + this.combo * 3, 3 + this.combo * 0.3);
+        if (this.combo >= 3) this.ui.toast(`Combo x${this.combo}!`, 700);
         if (this.coinsCollected === this.coinsTotal) {
           this.world.setPortalActive(true);
           this.ui.setObjective('Portal open! Reach it to advance.');
@@ -335,6 +350,9 @@ export class Game {
       return;
     }
 
+    // Combo timeout (visual reset after 3s)
+    if (this.combo > 1 && this.elapsed - this.lastCoinTime > 3.0) this.combo = 0;
+
     // HUD
     this.ui.updateHud({
       level: this.levelIndex + 1,
@@ -345,6 +363,29 @@ export class Game {
       hp: this.player.hp,
       maxHp: this.player.maxHp,
       powerups: this.player.powerups,
+      combo: this.combo,
+    });
+
+    // Minimap
+    this.ui.updateMinimap({
+      arenaSize: this.world.size,
+      theme: this.world.theme,
+      player: {
+        x: this.player.position.x,
+        z: this.player.position.z,
+        facing: this.player.facing,
+      },
+      coins: this.coins.map(c => ({ x: c.mesh.position.x, z: c.mesh.position.z })),
+      powerups: this.powerups.map(p => ({ x: p.mesh.position.x, z: p.mesh.position.z })),
+      enemies: this.enemies.map(e => ({
+        x: e.mesh.position.x, z: e.mesh.position.z,
+        kind: e.constructor.name.toLowerCase(),
+      })),
+      portal: this.world.portal ? {
+        x: this.world.portal.group.position.x,
+        z: this.world.portal.group.position.z,
+      } : null,
+      portalActive: this.world.portal?.active,
     });
   }
 }

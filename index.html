@@ -12,29 +12,33 @@
 
   <!-- HUD -->
   <div id="hud" class="hidden">
-    <div class="hud-row">
-      <div class="hud-box">
-        <div class="hud-label">LEVEL</div>
-        <div id="hud-level" class="hud-value">1</div>
+    <div class="hud-left">
+      <div class="hud-row">
+        <div class="hud-box">
+          <div class="hud-label">LEVEL</div>
+          <div id="hud-level" class="hud-value">1</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">SCORE</div>
+          <div id="hud-score" class="hud-value">0</div>
+          <div id="hud-combo" class="combo hidden">x2</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">COINS</div>
+          <div id="hud-coins" class="hud-value">0 / 0</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">TIME</div>
+          <div id="hud-time" class="hud-value">0.0</div>
+        </div>
       </div>
-      <div class="hud-box">
-        <div class="hud-label">SCORE</div>
-        <div id="hud-score" class="hud-value">0</div>
+      <div class="hud-row">
+        <div id="hud-hearts" class="hearts"></div>
+        <div id="hud-powerups" class="powerups"></div>
       </div>
-      <div class="hud-box">
-        <div class="hud-label">COINS</div>
-        <div id="hud-coins" class="hud-value">0 / 0</div>
-      </div>
-      <div class="hud-box">
-        <div class="hud-label">TIME</div>
-        <div id="hud-time" class="hud-value">0.0</div>
-      </div>
+      <div id="hud-objective">Collect all coins, then reach the portal!</div>
     </div>
-    <div class="hud-row">
-      <div id="hud-hearts" class="hearts"></div>
-      <div id="hud-powerups" class="powerups"></div>
-    </div>
-    <div id="hud-objective">Collect all coins, then reach the portal!</div>
+    <div id="minimap"></div>
     <div id="hud-hint">WASD/Arrows • Space jump • Shift dash • P pause • M mute</div>
   </div>
 

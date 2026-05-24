@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { Water } from 'three/addons/objects/Water.js';
 import { Textures } from './textures.js';
 import { SkyDome } from './sky.js';
+import { Assets } from './assets.js';
 
 export class World {
   constructor(scene) {
@@ -25,9 +27,11 @@ export class World {
     this.obstacles = [];
     this.lavaPads = [];
     this.portal = null;
-    // Remove level-local lights from previous build
     for (const l of this.lights) this.scene.remove(l);
     this.lights = [];
+    this.water = null;
+    this.groundMat = null;
+    this.wallMats = [];
   }
 
   build(levelDef, rng) {
@@ -66,31 +70,64 @@ export class World {
       groundGeo.computeVertexNormals();
     }
 
+    // Prefer real texture for grass theme if loaded; otherwise procedural
+    let realMap = null, realNormal = null;
+    if (this.theme === 'grass' && Assets.grass) {
+      realMap = Assets.grass.clone();
+      realMap.repeat.set(this.size / 4, this.size / 4);
+      realMap.colorSpace = THREE.SRGBColorSpace;
+      realMap.wrapS = realMap.wrapT = THREE.RepeatWrapping;
+      realMap.needsUpdate = true;
+      if (Assets.grassNormal) {
+        realNormal = Assets.grassNormal.clone();
+        realNormal.repeat.set(this.size / 4, this.size / 4);
+        realNormal.wrapS = realNormal.wrapT = THREE.RepeatWrapping;
+        realNormal.needsUpdate = true;
+      }
+    }
     const groundMat = new THREE.MeshStandardMaterial({
-      map: groundTex,
-      normalMap: groundNormal,
-      normalScale: new THREE.Vector2(0.7, 0.7),
-      roughness: this.theme === 'snow' ? 0.85 : 0.92,
+      map: realMap || groundTex,
+      normalMap: realNormal || groundNormal,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: this.theme === 'snow' ? 0.78 : 0.92,
       metalness: this.theme === 'space' ? 0.35 : 0.0,
-      envMapIntensity: 0.6,
+      envMapIntensity: this.theme === 'space' ? 1.2 : 0.85,
     });
+    this.groundMat = groundMat;
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.group.add(ground);
 
-    // Walls (textured rounded blocks)
-    const wallTex = Textures.wall(this.theme).clone();
-    wallTex.needsUpdate = true;
-    const wallNormal = Textures.groundNormal(this.theme).clone();
-    wallNormal.needsUpdate = true;
+    // Walls — prefer real brick textures (bump + roughness), fall back to procedural normal map
+    let wMap = null, wBump = null, wRough = null, wNormal = null;
+    if (Assets.brick) {
+      wMap = Assets.brick.clone(); wMap.colorSpace = THREE.SRGBColorSpace;
+      wMap.wrapS = wMap.wrapT = THREE.RepeatWrapping; wMap.needsUpdate = true;
+      if (Assets.brickBump) {
+        wBump = Assets.brickBump.clone();
+        wBump.wrapS = wBump.wrapT = THREE.RepeatWrapping; wBump.needsUpdate = true;
+      }
+      if (Assets.brickRoughness) {
+        wRough = Assets.brickRoughness.clone();
+        wRough.wrapS = wRough.wrapT = THREE.RepeatWrapping; wRough.needsUpdate = true;
+      }
+    } else {
+      wMap = Textures.wall(this.theme).clone(); wMap.needsUpdate = true;
+      wNormal = Textures.groundNormal(this.theme).clone(); wNormal.needsUpdate = true;
+    }
     const wallMat = new THREE.MeshStandardMaterial({
-      map: wallTex,
-      normalMap: wallNormal,
-      normalScale: new THREE.Vector2(0.5, 0.5),
-      roughness: 0.7,
+      map: wMap,
+      normalMap: wNormal,
+      bumpMap: wBump,
+      bumpScale: 0.5,
+      roughnessMap: wRough || null,
+      normalScale: new THREE.Vector2(0.6, 0.6),
+      roughness: wRough ? 1.0 : 0.7,
       metalness: 0.05,
+      envMapIntensity: 0.85,
     });
+    this.wallMats.push(wallMat);
     const wallH = 2.4;
     const wallT = 1.2;
     const W = this.size;
@@ -104,24 +141,46 @@ export class World {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wallMat);
       m.position.set(x, wallH / 2, z);
       m.castShadow = true; m.receiveShadow = true;
-      // Tile texture on long walls
       const tileX = Math.max(w, d) / 4;
       const inst = m.material.clone();
-      inst.map = wallTex.clone();
-      inst.map.wrapS = inst.map.wrapT = THREE.RepeatWrapping;
-      inst.map.repeat.set(tileX, 1);
-      inst.map.needsUpdate = true;
+      if (inst.map) {
+        inst.map = inst.map.clone();
+        inst.map.wrapS = inst.map.wrapT = THREE.RepeatWrapping;
+        inst.map.repeat.set(tileX, 1);
+        inst.map.colorSpace = THREE.SRGBColorSpace;
+        inst.map.needsUpdate = true;
+      }
+      if (inst.normalMap) {
+        inst.normalMap = inst.normalMap.clone();
+        inst.normalMap.wrapS = inst.normalMap.wrapT = THREE.RepeatWrapping;
+        inst.normalMap.repeat.set(tileX, 1);
+        inst.normalMap.needsUpdate = true;
+      }
+      if (inst.bumpMap) {
+        inst.bumpMap = inst.bumpMap.clone();
+        inst.bumpMap.wrapS = inst.bumpMap.wrapT = THREE.RepeatWrapping;
+        inst.bumpMap.repeat.set(tileX, 1);
+        inst.bumpMap.needsUpdate = true;
+      }
+      if (inst.roughnessMap) {
+        inst.roughnessMap = inst.roughnessMap.clone();
+        inst.roughnessMap.wrapS = inst.roughnessMap.wrapT = THREE.RepeatWrapping;
+        inst.roughnessMap.repeat.set(tileX, 1);
+        inst.roughnessMap.needsUpdate = true;
+      }
       m.material = inst;
+      this.wallMats.push(inst);
       this.group.add(m);
     }
 
     // Obstacles — rounded boxes with PBR materials
     const obsMat = new THREE.MeshStandardMaterial({
       color: this.themeObstacleColor(),
-      roughness: 0.55,
-      metalness: this.theme === 'space' ? 0.5 : 0.1,
-      envMapIntensity: 0.5,
+      roughness: 0.45,
+      metalness: this.theme === 'space' ? 0.55 : 0.15,
+      envMapIntensity: this.theme === 'space' ? 1.4 : 1.0,
     });
+    this.obstacleMat = obsMat;
     for (let i = 0; i < levelDef.obstacles; i++) {
       const s = 1.4 + rng() * 2.2;
       const geo = new RoundedBoxGeometry(s, s, s, 4, s * 0.18);
@@ -163,6 +222,25 @@ export class World {
 
     // Theme decoration
     this.decorate(rng);
+
+    // Reflective pond for grass theme (decorative — sits outside arena bounds)
+    if (this.theme === 'grass' && Assets.waterNormals) {
+      const pondGeo = new THREE.CircleGeometry(7, 48);
+      const water = new Water(pondGeo, {
+        textureWidth: 512,
+        textureHeight: 512,
+        waterNormals: Assets.waterNormals,
+        sunDirection: new THREE.Vector3(0.5, 1, 0.3).normalize(),
+        sunColor: 0xfff2c8,
+        waterColor: 0x224477,
+        distortionScale: 1.6,
+        fog: !!this.scene.fog,
+      });
+      water.rotation.x = -Math.PI / 2;
+      water.position.set(this.size + 12, 0.2, 0);
+      this.group.add(water);
+      this.water = water;
+    }
 
     // Portal
     this.portal = this.createPortal(levelDef.accent);
@@ -441,6 +519,55 @@ export class World {
     return { x: 0, z: 0 };
   }
 
+  /** Hot-swap to real textures after async asset load. Called once at startup. */
+  applyAssets(assets) {
+    if (assets.grass && this.theme === 'grass' && this.groundMat) {
+      const m = assets.grass.clone();
+      m.repeat.set(this.size / 4, this.size / 4);
+      m.colorSpace = THREE.SRGBColorSpace;
+      m.wrapS = m.wrapT = THREE.RepeatWrapping;
+      m.needsUpdate = true;
+      this.groundMat.map = m;
+      if (assets.grassNormal) {
+        const n = assets.grassNormal.clone();
+        n.repeat.set(this.size / 4, this.size / 4);
+        n.wrapS = n.wrapT = THREE.RepeatWrapping;
+        n.needsUpdate = true;
+        this.groundMat.normalMap = n;
+      }
+      this.groundMat.needsUpdate = true;
+    }
+    if (assets.brick && this.wallMats.length) {
+      for (const wm of this.wallMats) {
+        const tileX = (wm.map?.repeat?.x) || 4;
+        const b = assets.brick.clone();
+        b.colorSpace = THREE.SRGBColorSpace;
+        b.wrapS = b.wrapT = THREE.RepeatWrapping;
+        b.repeat.set(tileX, 1);
+        b.needsUpdate = true;
+        wm.map = b;
+        if (assets.brickBump) {
+          const n = assets.brickBump.clone();
+          n.wrapS = n.wrapT = THREE.RepeatWrapping;
+          n.repeat.set(tileX, 1);
+          n.needsUpdate = true;
+          wm.bumpMap = n;
+          wm.bumpScale = 0.5;
+          wm.normalMap = null;
+        }
+        if (assets.brickRoughness) {
+          const r = assets.brickRoughness.clone();
+          r.wrapS = r.wrapT = THREE.RepeatWrapping;
+          r.repeat.set(tileX, 1);
+          r.needsUpdate = true;
+          wm.roughnessMap = r;
+          wm.roughness = 1.0;
+        }
+        wm.needsUpdate = true;
+      }
+    }
+  }
+
   update(dt, t) {
     if (this.portal) {
       this.portal.ring.rotation.z += dt * 1.5;
@@ -450,6 +577,9 @@ export class World {
     }
     for (const p of this.lavaPads) {
       p.mesh.material.emissiveIntensity = 1.2 + Math.sin(t * 6 + p.mesh.position.x) * 0.45;
+    }
+    if (this.water) {
+      this.water.material.uniforms['time'].value += dt;
     }
     if (this.snow) {
       const pos = this.snow.geometry.attributes.position;
