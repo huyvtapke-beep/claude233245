@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cube Quest 3D</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="game-root">
+  <canvas id="canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-left">
+      <div class="hud-row">
+        <div class="hud-box">
+          <div class="hud-label">LEVEL</div>
+          <div id="hud-level" class="hud-value">1</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">SCORE</div>
+          <div id="hud-score" class="hud-value">0</div>
+          <div id="hud-combo" class="combo hidden">x2</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">COINS</div>
+          <div id="hud-coins" class="hud-value">0 / 0</div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-label">TIME</div>
+          <div id="hud-time" class="hud-value">0.0</div>
+        </div>
+      </div>
+      <div class="hud-row">
+        <div id="hud-hearts" class="hearts"></div>
+        <div id="hud-powerups" class="powerups"></div>
+      </div>
+      <div id="hud-objective">Collect all coins, then reach the portal!</div>
+    </div>
+    <div id="minimap"></div>
+    <div id="hud-hint">WASD/Arrows • Space jump • Shift dash • P pause • M mute</div>
+  </div>
+
+  <!-- Main Menu -->
+  <div id="menu" class="overlay">
+    <div class="title">CUBE QUEST <span class="accent">3D</span></div>
+    <div class="subtitle">A small adventure across five worlds</div>
+    <div class="menu-buttons">
+      <button data-action="start">PLAY</button>
+      <button data-action="how">HOW TO PLAY</button>
+      <button data-action="scores">HIGH SCORES</button>
+      <button data-action="credits">CREDITS</button>
+    </div>
+    <div class="footer">
+      <span>Best Score: <b id="menu-best">0</b></span>
+      <span>Levels Cleared: <b id="menu-cleared">0</b> / 5</span>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause" class="overlay hidden">
+    <div class="title">PAUSED</div>
+    <div class="menu-buttons">
+      <button data-action="resume">RESUME</button>
+      <button data-action="restart">RESTART LEVEL</button>
+      <button data-action="quit">MAIN MENU</button>
+    </div>
+  </div>
+
+  <!-- Game Over -->
+  <div id="gameover" class="overlay hidden">
+    <div class="title danger">GAME OVER</div>
+    <div id="gameover-stats" class="stats"></div>
+    <div class="menu-buttons">
+      <button data-action="retry">TRY AGAIN</button>
+      <button data-action="quit">MAIN MENU</button>
+    </div>
+  </div>
+
+  <!-- Level Complete -->
+  <div id="levelcomplete" class="overlay hidden">
+    <div class="title good">LEVEL COMPLETE!</div>
+    <div id="lc-stats" class="stats"></div>
+    <div id="lc-stars" class="stars"></div>
+    <div class="menu-buttons">
+      <button data-action="next">NEXT LEVEL</button>
+      <button data-action="retry">REPLAY</button>
+      <button data-action="quit">MAIN MENU</button>
+    </div>
+  </div>
+
+  <!-- Victory -->
+  <div id="victory" class="overlay hidden">
+    <div class="title good">QUEST COMPLETE</div>
+    <div class="subtitle">You have conquered all five worlds.</div>
+    <div id="victory-stats" class="stats"></div>
+    <div class="menu-buttons">
+      <button data-action="quit">MAIN MENU</button>
+    </div>
+  </div>
+
+  <!-- Info modals -->
+  <div id="info" class="overlay hidden">
+    <div id="info-title" class="title">INFO</div>
+    <div id="info-body" class="info-body"></div>
+    <div class="menu-buttons">
+      <button data-action="back">BACK</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
