@@ -120,6 +120,7 @@ export class Game {
     this.state = 'menu';
     Audio.stopMusic();
     this.player.mesh.visible = false;
+    this.player.shadowDisc.visible = false;
     this.ui.showHUD(false);
     this.ui.refreshMenu();
     this.ui.showOverlay('menu');
