@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Coin Collector 3D</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #87ceeb; font-family: sans-serif; }
+  #hud {
+    position: absolute; top: 12px; left: 12px; color: #fff;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.7); font-size: 18px;
+    user-select: none; pointer-events: none;
+  }
+  #hud .small { font-size: 13px; opacity: 0.85; }
+  #msg {
+    position: absolute; top: 40%; left: 0; right: 0; text-align: center;
+    color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    font-size: 36px; display: none;
+  }
+  #msg button {
+    margin-top: 16px; padding: 8px 20px; font-size: 18px;
+    background: #ffcc33; border: none; border-radius: 6px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div>Score: <span id="score">0</span> / <span id="total">0</span></div>
+  <div>Time: <span id="time">0</span>s</div>
+  <div class="small">WASD / Arrows to move &middot; Space to jump</div>
+</div>
+<div id="msg">
+  <div id="msgText">You win!</div>
+  <button id="restart">Play again</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 40, 90);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+sun.position.set(20, 30, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40; sun.shadow.camera.bottom = -40;
+scene.add(sun);
+
+const ARENA = 40;
+const groundGeo = new THREE.PlaneGeometry(ARENA * 2, ARENA * 2);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x4a8f3a });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+const wallH = 1.5;
+function makeWall(w, d, x, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wallMat);
+  m.position.set(x, wallH / 2, z);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+}
+makeWall(ARENA * 2, 1, 0,  ARENA);
+makeWall(ARENA * 2, 1, 0, -ARENA);
+makeWall(1, ARENA * 2,  ARENA, 0);
+makeWall(1, ARENA * 2, -ARENA, 0);
+
+const obstacles = [];
+const obsMat = new THREE.MeshStandardMaterial({ color: 0x555566 });
+for (let i = 0; i < 8; i++) {
+  const s = 1.5 + Math.random() * 2;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), obsMat);
+  m.position.set((Math.random() - 0.5) * (ARENA - 6), s / 2, (Math.random() - 0.5) * (ARENA - 6));
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  obstacles.push({ mesh: m, half: s / 2 });
+}
+
+const playerGeo = new THREE.BoxGeometry(1, 1, 1);
+const playerMat = new THREE.MeshStandardMaterial({ color: 0xff4444 });
+const player = new THREE.Mesh(playerGeo, playerMat);
+player.position.set(0, 0.5, 0);
+player.castShadow = true;
+scene.add(player);
+
+const coins = [];
+const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 24);
+const coinMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.6, roughness: 0.25, emissive: 0x554400 });
+const TOTAL_COINS = 12;
+function spawnCoins() {
+  for (const c of coins) scene.remove(c);
+  coins.length = 0;
+  let tries = 0;
+  while (coins.length < TOTAL_COINS && tries < 500) {
+    tries++;
+    const x = (Math.random() - 0.5) * (ARENA - 4);
+    const z = (Math.random() - 0.5) * (ARENA - 4);
+    let bad = false;
+    for (const o of obstacles) {
+      if (Math.abs(x - o.mesh.position.x) < o.half + 0.6 && Math.abs(z - o.mesh.position.z) < o.half + 0.6) { bad = true; break; }
+    }
+    if (bad) continue;
+    const m = new THREE.Mesh(coinGeo, coinMat);
+    m.position.set(x, 0.7, z);
+    m.rotation.x = Math.PI / 2;
+    m.castShadow = true;
+    scene.add(m);
+    coins.push(m);
+  }
+}
+
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.code] = true; });
+window.addEventListener('keyup',   e => { keys[e.code] = false; });
+
+const state = {
+  vy: 0, onGround: true, score: 0, time: 0, finished: false,
+};
+const GRAVITY = -25;
+const JUMP_V = 8.5;
+const SPEED = 8;
+
+const scoreEl = document.getElementById('score');
+const totalEl = document.getElementById('total');
+const timeEl  = document.getElementById('time');
+const msgEl   = document.getElementById('msg');
+const msgText = document.getElementById('msgText');
+document.getElementById('restart').addEventListener('click', resetGame);
+
+function resetGame() {
+  state.vy = 0; state.onGround = true; state.score = 0; state.time = 0; state.finished = false;
+  player.position.set(0, 0.5, 0);
+  spawnCoins();
+  scoreEl.textContent = '0';
+  totalEl.textContent = String(TOTAL_COINS);
+  msgEl.style.display = 'none';
+}
+
+function collidesObstacle(nx, nz) {
+  const half = 0.5;
+  for (const o of obstacles) {
+    const dx = Math.abs(nx - o.mesh.position.x);
+    const dz = Math.abs(nz - o.mesh.position.z);
+    if (dx < o.half + half && dz < o.half + half && player.position.y < o.half * 2) return true;
+  }
+  return false;
+}
+
+const clock = new THREE.Clock();
+function animate() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (!state.finished) state.time += dt;
+
+  let mx = 0, mz = 0;
+  if (keys['KeyW'] || keys['ArrowUp'])    mz -= 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  mz += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  mx -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+  const len = Math.hypot(mx, mz);
+  if (len > 0) { mx /= len; mz /= len; }
+
+  const nx = player.position.x + mx * SPEED * dt;
+  const nz = player.position.z + mz * SPEED * dt;
+  const bound = ARENA - 1;
+  if (!collidesObstacle(nx, player.position.z)) player.position.x = Math.max(-bound, Math.min(bound, nx));
+  if (!collidesObstacle(player.position.x, nz)) player.position.z = Math.max(-bound, Math.min(bound, nz));
+
+  if (keys['Space'] && state.onGround) { state.vy = JUMP_V; state.onGround = false; }
+  state.vy += GRAVITY * dt;
+  player.position.y += state.vy * dt;
+  if (player.position.y <= 0.5) { player.position.y = 0.5; state.vy = 0; state.onGround = true; }
+
+  if (len > 0) player.rotation.y = Math.atan2(mx, -mz);
+
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const c = coins[i];
+    c.rotation.z += dt * 3;
+    c.position.y = 0.7 + Math.sin((state.time + i) * 3) * 0.1;
+    const dx = c.position.x - player.position.x;
+    const dz = c.position.z - player.position.z;
+    const dy = c.position.y - player.position.y;
+    if (dx * dx + dz * dz + dy * dy < 1.0) {
+      scene.remove(c);
+      coins.splice(i, 1);
+      state.score++;
+      scoreEl.textContent = String(state.score);
+    }
+  }
+
+  if (!state.finished && coins.length === 0) {
+    state.finished = true;
+    msgText.textContent = `You won in ${state.time.toFixed(1)}s!`;
+    msgEl.style.display = 'block';
+  }
+
+  timeEl.textContent = state.time.toFixed(1);
+
+  const camOffset = new THREE.Vector3(0, 8, 12);
+  camera.position.lerp(player.position.clone().add(camOffset), 0.1);
+  camera.lookAt(player.position.x, player.position.y + 0.5, player.position.z);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+resetGame();
+animate();
+</script>
+</body>
+</html>
