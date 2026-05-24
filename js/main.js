@@ -20,7 +20,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
+renderer.toneMappingExposure = 1.0;
 
 // Scene & camera
 const scene = new THREE.Scene();
@@ -42,12 +42,12 @@ scene.environment = pmremGenerator.fromScene(roomEnv, 0.04).texture;
 const ambient = new THREE.AmbientLight(0xffffff, 0.12);
 scene.add(ambient);
 
-const hemi = new THREE.HemisphereLight(0xb6d6ff, 0x4a3a20, 0.45);
+const hemi = new THREE.HemisphereLight(0xb6d6ff, 0x4a3a20, 0.32);
 hemi.position.set(0, 50, 0);
 scene.add(hemi);
 
 // Main directional sun with tighter, sharper shadows
-const sun = new THREE.DirectionalLight(0xfff2c8, 1.45);
+const sun = new THREE.DirectionalLight(0xfff2c8, 1.05);
 sun.position.set(28, 50, 18);
 sun.castShadow = true;
 const SHADOW_RES = window.devicePixelRatio > 1 ? 2048 : 4096;
@@ -207,9 +207,13 @@ function updateSun() {
 
 function tuneBloomForLevel() {
   const t = game.world?.theme;
-  if (!t) { bloom.strength = 0.6; return; }
-  bloom.strength = { grass: 0.55, desert: 0.55, snow: 0.6, lava: 1.1, space: 1.0 }[t] || 0.6;
-  bloom.threshold = (t === 'lava' || t === 'space') ? 0.68 : 0.82;
+  // Per-theme exposure: pull bright outdoor scenes back, lift dark ones
+  const exposure = { grass: 0.95, desert: 0.82, snow: 0.85, lava: 1.05, space: 1.0 }[t] ?? 1.0;
+  renderer.toneMappingExposure = exposure;
+  if (!t) { bloom.strength = 0.6; bloom.threshold = 0.85; return; }
+  // Bright themes get weaker, higher-threshold bloom; dark themes keep punch.
+  bloom.strength  = { grass: 0.38, desert: 0.28, snow: 0.4,  lava: 1.05, space: 0.95 }[t] ?? 0.5;
+  bloom.threshold = { grass: 0.95, desert: 1.0,  snow: 0.95, lava: 0.68, space: 0.72 }[t] ?? 0.85;
 }
 let lastTheme = null;
 function checkTheme() {

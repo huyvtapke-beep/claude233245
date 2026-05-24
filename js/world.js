@@ -89,9 +89,9 @@ export class World {
       map: realMap || groundTex,
       normalMap: realNormal || groundNormal,
       normalScale: new THREE.Vector2(0.85, 0.85),
-      roughness: this.theme === 'snow' ? 0.78 : 0.92,
+      roughness: this.theme === 'snow' ? 0.85 : 0.95,
       metalness: this.theme === 'space' ? 0.35 : 0.0,
-      envMapIntensity: this.theme === 'space' ? 1.2 : 0.85,
+      envMapIntensity: this.theme === 'space' ? 0.9 : 0.45,
     });
     this.groundMat = groundMat;
     const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -123,9 +123,9 @@ export class World {
       bumpScale: 0.5,
       roughnessMap: wRough || null,
       normalScale: new THREE.Vector2(0.6, 0.6),
-      roughness: wRough ? 1.0 : 0.7,
+      roughness: wRough ? 1.0 : 0.8,
       metalness: 0.05,
-      envMapIntensity: 0.85,
+      envMapIntensity: 0.5,
     });
     this.wallMats.push(wallMat);
     const wallH = 2.4;
@@ -176,9 +176,9 @@ export class World {
     // Obstacles — rounded boxes with PBR materials
     const obsMat = new THREE.MeshStandardMaterial({
       color: this.themeObstacleColor(),
-      roughness: 0.45,
-      metalness: this.theme === 'space' ? 0.55 : 0.15,
-      envMapIntensity: this.theme === 'space' ? 1.4 : 1.0,
+      roughness: 0.55,
+      metalness: this.theme === 'space' ? 0.5 : 0.1,
+      envMapIntensity: this.theme === 'space' ? 1.0 : 0.6,
     });
     this.obstacleMat = obsMat;
     for (let i = 0; i < levelDef.obstacles; i++) {
